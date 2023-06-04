@@ -78,6 +78,7 @@ your `pip`, `setuptools`，`wheel` and `spacy` are up to date, and ``en_core_web
 pip install -U pip setuptools wheel
 pip install -U spacy
 python -m spacy download en_core_web_sm
+python -m spacy download de_core_news_sm
 ```
 
 Install the official Python module from PyPI:

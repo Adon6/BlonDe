@@ -1,12 +1,15 @@
 import logging, spacy, re
-from . import CATEGORIES, VB_TYPE, PRONOUN_TYPE, PRONOUN_MAP, DM_TYPE, DM_MAP
+from . import CATEGORIES_EN, CATEGORIES_DE, VB_TYPE, PRONOUN_TYPE_ENGLISH, PRONOUN_TYPE_GERMAN,\
+    PRONOUN_MAP_ENGLISH, PRONOUN_MAP_GERMAN, DM_TYPE, DM_MAP, PRONOUN_TAGS_ENGLISH, PRONOUN_TAGS_GERMAN,\
+    PRONOUN_MAP_ENGLISH_2ND_PERSON, PRONOUN_MAP_GERMAN_2ND_PERSON, PRONOUN_MAP_ENGLISH_3rd_PERSON_PLURAL
 from .utils import ProcessedSent, ProcessedDoc, ProcessedCorpus
 from collections import Counter
 from typing import Sequence, Tuple, Dict
 
-import en_core_web_sm
+import en_core_web_sm, de_core_news_sm
 # spacy.prefer_gpu()
-nlp = en_core_web_sm.load()
+nlp_en = en_core_web_sm.load()
+nlp_de = de_core_news_sm.load()
 # nlp = spacy.load('en_core_web_sm')
 
 def count_vb(sent_tag):
@@ -17,23 +20,78 @@ def count_vb(sent_tag):
     return count_vb
 
 
-def count_pronoun(sent_tok):
+def count_formality(sent_tok, sent_tag, source_sent, source_tags):
+    types = ['formal', 'informal']
+    count_fo = Counter()
+    assert len(sent_tok) == len(sent_tag)
+    if source_sent is not None:  # we check if  2nd person neutral pronoun is in source sentence
+        valid_example = False
+        assert len(source_sent) == len(source_tags)
+        for word, tag in zip(source_sent, source_tags):
+            if tag in PRONOUN_TAGS_ENGLISH and word in PRONOUN_MAP_ENGLISH_2ND_PERSON:
+                valid_example = True
+        if valid_example:
+            for word, tag in zip(source_sent, source_tags):  # if 3rd person neuter/female or 3rd person plural is in source, formal style could be mistaken for those
+                if tag in PRONOUN_TAGS_ENGLISH and word in PRONOUN_MAP_ENGLISH_3rd_PERSON_PLURAL + PRONOUN_MAP_ENGLISH['neuter'] + PRONOUN_MAP_ENGLISH['feminine']:
+                    types.remove('formal')
+                    break
+    else:
+        valid_example = True
+    if not valid_example:
+        return Counter()  # we are only looking for 3rd person neutral pronouns here
+    for word, tag in zip(sent_tok, sent_tag):
+        for type in types:
+            if word in PRONOUN_MAP_GERMAN_2ND_PERSON[type] and tag in PRONOUN_TAGS_GERMAN:
+                count_fo[type] += 1
+    # if len(count_fo) > 0:
+    #     import pdb; pdb.set_trace()
+    return count_fo
+
+
+def count_pronoun(sent_tok, pronoun_type, pronoun_map, sent_tag, pronoun_tags, source_sent=None, source_tags=None,
+                  source_lang=None):
+    pronoun_type = pronoun_type.copy()
     count_pr = Counter()
-    for word in sent_tok:
-        for type in PRONOUN_TYPE:
-            if word in PRONOUN_MAP[type]:
+    assert len(sent_tok) == len(sent_tag)
+    if source_sent is not None:  # we check if  3rd person neutral pronoun is in source sentence
+        valid_example = False
+        assert len(source_sent) == len(source_tags)
+        for word, tag in zip(source_sent, source_tags):
+            if tag in PRONOUN_TAGS_ENGLISH and word in PRONOUN_MAP_ENGLISH['neuter']:
+                valid_example = True
+        if valid_example:
+            for word, tag in zip(source_sent, source_tags):  # if 2nd person or 3rd person plural is in source, we can not reliably detect female form
+                if tag in PRONOUN_TAGS_ENGLISH and word in (PRONOUN_MAP_ENGLISH_2ND_PERSON + PRONOUN_MAP_ENGLISH_3rd_PERSON_PLURAL):
+                    pronoun_type.remove('feminine')
+                    break
+    else:
+        valid_example = True
+    if not valid_example:
+        return Counter()  # we are only looking for 3rd person neutral pronouns here
+    for word, tag in zip(sent_tok, sent_tag):
+        for type in pronoun_type:
+            if word in pronoun_map[type] and tag in pronoun_tags:
                 count_pr[type] += 1
+    # if len(count_pr) > 1:
+    #     import pdb; pdb.set_trace()
     return count_pr
 
 
-def count_entity(sent_ent: Tuple[str, str, int, int]) -> Sequence[Counter]:
+def count_entity(sent_ent: Tuple[str, str, int, int], tgt_lang) -> Sequence[Counter]:
     cnt_person = Counter()
     cnt_non_person = Counter()
-    for ent in sent_ent:
-        if ent[1] == 'PERSON':
-            cnt_person[ent[0]] += 1
-        elif ent[1] == 'NORP' or ent[1] == 'GPE' or ent[1] == 'FAC' or ent[1] == 'ORG' or ent[1] == 'WORK_OF_ART':
-            cnt_non_person[ent[0]] += 1
+    if tgt_lang == 'english':
+        for ent in sent_ent:
+            if ent[1] == 'PERSON':
+                cnt_person[ent[0]] += 1
+            elif ent[1] == 'NORP' or ent[1] == 'GPE' or ent[1] == 'FAC' or ent[1] == 'ORG' or ent[1] == 'WORK_OF_ART':
+                cnt_non_person[ent[0]] += 1
+    elif tgt_lang == 'german':
+        for ent in sent_ent:
+            if ent[1] == 'PER':
+                cnt_person[ent[0]] += 1
+            elif ent[1] == 'ORG':
+                cnt_non_person[ent[0]] += 1
     return [cnt_person, cnt_non_person]
 
 
@@ -85,7 +143,8 @@ def count_ngram(sent_tok: Sequence[str], orders: Tuple[int]) -> Sequence[Counter
     return [_extract_word_ngrams(sent_tok, n) for n in orders]
 
 
-def process_corpus(corpus: Sequence[Sequence[str]], categories: Dict[str, Sequence[str]]=CATEGORIES, lowercase=False) -> ProcessedCorpus:
+def process_corpus(corpus: Sequence[Sequence[str]], categories: Dict[str, Sequence[str]]=CATEGORIES_EN, lowercase=False,
+                   language='english', source=None, source_lang=None) -> ProcessedCorpus:
     """
     :param corpus: a list of documents from a same corpus, which share the same named entities, such as a book.
                 corpus = [doc1, doc2, ...], where doc1 = [sent1, sent2, ...], and `sent1` is a string.
@@ -108,6 +167,26 @@ def process_corpus(corpus: Sequence[Sequence[str]], categories: Dict[str, Sequen
                               "dm": a dict of the counts of DM categories, where the keys are DM_TYPE (5 keys)
                               "n-gram": [1-gram, i-gram, ...], where `i-gram`s are counters and the keys are i-grams.
     """
+    if language == 'english':
+        nlp = nlp_en
+        categories = CATEGORIES_EN
+        pronoun_type = PRONOUN_TYPE_ENGLISH
+        pronoun_map = PRONOUN_MAP_ENGLISH
+        pronoun_tags = PRONOUN_TAGS_ENGLISH
+    elif language == 'german':
+        nlp = nlp_de
+        categories = CATEGORIES_DE
+        pronoun_type = PRONOUN_TYPE_GERMAN
+        pronoun_map = PRONOUN_MAP_GERMAN
+        pronoun_tags = PRONOUN_TAGS_GERMAN
+
+    if source is not None:
+        if lowercase:
+            source = [sent.lower() for sent in source]
+        source = list(nlp_en.pipe(source, disable=["parser"]))
+        source_sent = [[w.text for w in doc] for doc in source]
+        source_tags = [[w.tag_ for w in doc] for doc in source]
+
     flat_doc_list, sent_num_per_doc = _flatten_list(corpus)
     if lowercase:
         flat_doc_list = [sent.lower() for sent in flat_doc_list]
@@ -123,9 +202,18 @@ def process_corpus(corpus: Sequence[Sequence[str]], categories: Dict[str, Sequen
         if "tense" in categories.keys():
             processed_sent["count"]["tense"] = count_vb(sent_tag)
         if "pronoun" in categories.keys():
-            processed_sent["count"]["pronoun"] = count_pronoun(sent_tok)
+            processed_sent["count"]["pronoun"] = count_pronoun(sent_tok, pronoun_type=pronoun_type,
+                                                               pronoun_map=pronoun_map, sent_tag=sent_tag,
+                                                               pronoun_tags=pronoun_tags,
+                                                               source_sent=source_sent[k] if source is not None else None,
+                                                               source_tags=source_tags[k] if source is not None else None,
+                                                               source_lang=source_lang)
+        if "formality" in categories.keys():
+            processed_sent["count"]["formality"] = count_formality(sent_tok, sent_tag=sent_tag,
+                                                               source_sent=source_sent[k] if source is not None else None,
+                                                               source_tags=source_tags[k] if source is not None else None,)
         if "entity" in categories.keys():
-            processed_sent["count"]["entity"] = count_entity(sent_ent)
+            processed_sent["count"]["entity"] = count_entity(sent_ent, tgt_lang=language)
         if "dm" in categories.keys():
             processed_sent["count"]["dm"] = count_dm(sent_tok)
         if "n-gram" in categories.keys():

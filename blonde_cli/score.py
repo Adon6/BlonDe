@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 from io import open
 import argparse, os
-from blonde import BLONDE, CATEGORIES
+from blonde import BLONDE, CATEGORIES_EN, CATEGORIES_DE, WEIGHTS_EN, WEIGHTS_DE
 from blonde import __version__ as VERSION
 
 
@@ -16,9 +16,9 @@ def parse_args():
     # BLONDE related arguments
     blonde_args = arg_parser.add_argument_group('BLONDE related arguments')
     blonde_args.add_argument('--categories', '-c', type=str, nargs='+',
-                             default=('tense', 'pronoun', 'entity', 'dm', 'n-gram'),
+                             default=('tense', 'pronoun', 'entity', 'dm', 'n-gram', 'formality'),
                              help="The categories of BLONDE. "
-                                  "Default: ('tense', 'pronoun', 'entity', 'dm', 'n-gram')")
+                                  "Default: ('tense', 'pronoun', 'entity', 'dm', 'n-gram', 'formality')")
     blonde_args.add_argument('--average-method', '-aver', choices=('geometric', 'arithmetic'), default='geometric',
                              help='The average method to use, geometric or arithmetic(Defaults: (geometric, 1)')
     blonde_args.add_argument('--smooth-method', '-sm', choices=BLONDE.SMOOTH_DEFAULTS.keys(), default='exp',
@@ -30,6 +30,12 @@ def parse_args():
                                 f"add-k: {BLONDE.SMOOTH_DEFAULTS['add-k']})")
     blonde_args.add_argument('--lowercase', '-lc', type=bool, default=True,
                              help='If True, enables case-insensitivity. (Default: %(default)s)')
+    blonde_args.add_argument('--language', choices=('english', 'german'), default='english',
+                             help='The language for NER/POS')
+    blonde_args.add_argument('--source', default=None,
+                             help='Optional source file')
+    blonde_args.add_argument('--source-language', default=None,
+                             help='The source language')
     # Weight
     blonde_args.add_argument('--override-weights', '-w', action='store_true', default=False,
                              help='Whether to customize the weights of BLONDE')
@@ -84,6 +90,13 @@ def parse_args():
 def main():
     args = parse_args()
 
+    if args.language == 'english':
+        CATEGORIES = CATEGORIES_EN
+    elif args.language == 'german':
+        CATEGORIES = CATEGORIES_DE
+    else:
+        assert False
+
     if os.path.isfile(args.system):
         with open(args.system, encoding="utf-8") as f:
             sys = [line.strip() for line in f]
@@ -99,18 +112,35 @@ def main():
     elif os.path.isfile(args.reference[0]):
         assert os.path.exists(args.system), f"system file {args.system} doesn't exist"
 
+    # source text
+    if args.source is not None:
+        assert args.source_language == 'english'
+        with open(args.source, encoding="utf-8") as f:
+            src = [line.strip() for line in f]
+        assert len(src) == len(sys)
+    else:
+        src = None
+
+
     categories = {}
     for category in args.categories:
         categories[category] = CATEGORIES[category]
 
-    weights = BLONDE.WEIGHTS_DEFAULTS
+    if args.language == 'english':
+        weights = WEIGHTS_EN
+    elif args.language == 'german':
+        weights = WEIGHTS_DE
+    else:
+        assert False
+
     if args.override_weights:
         weights = {
             "tense": args.weight_tense,
             "pronoun": args.weight_pronoun,
             "entity": args.weight_entity,
             "dm": args.weight_discourse_marker,
-            "n-gram": (0.25, 0.25, 0.25, 0.25)
+            "n-gram": (0.25, 0.25, 0.25, 0.25),
+            "formality": (0.5, 0.5)
             }
 
     plus_categories, plus_weights, annotation, ner_refined = None, None, None, None
@@ -129,17 +159,20 @@ def main():
 
 
     blond = BLONDE(weights=weights,
-                 weight_normalize=args.reweight,
-                 average_method=args.average_method,
-                 categories=categories,
-                 plus_categories=plus_categories,
-                 plus_weights=plus_weights,
-                 lowercase=args.lowercase,
-                 smooth_method=args.smooth_method,
-                 smooth_value=args.smooth_value,
-                 references=refs,
-                 annotation=annotation,
-                 ner_refined=ner_refined)
+                   weight_normalize=args.reweight,
+                   average_method=args.average_method,
+                   categories=categories,
+                   plus_categories=plus_categories,
+                   plus_weights=plus_weights,
+                   lowercase=args.lowercase,
+                   smooth_method=args.smooth_method,
+                   smooth_value=args.smooth_value,
+                   references=refs,
+                   annotation=annotation,
+                   ner_refined=ner_refined,
+                   language=args.language,
+                   source=src,
+                   source_lang=args.source_language)
     score = blond.corpus_score([sys], annotation=annotation)
     print(score)
 

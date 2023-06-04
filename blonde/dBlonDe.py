@@ -81,6 +81,8 @@ def scoring(doc_s_count: Sequence[Counts], max_doc_r_count: Sequence[Counts], we
         tmp_similarity, tmp_numerator, tmp_denominator_r, tmp_denominator_s = sim(
             sent_s_count, max_sent_r_count, weights, categories)
         total_similarity += tmp_similarity
+        # import pdb;
+        # pdb.set_trace()
         for key in tmp_numerator.keys():
             total_numerator[key] += tmp_numerator[key]
             total_denominator_r[key] += tmp_denominator_r[key]
@@ -100,6 +102,7 @@ def scoring(doc_s_count: Sequence[Counts], max_doc_r_count: Sequence[Counts], we
                                                   orders, smooth_method, smooth_value)
         # update eff_order based on smooth_method
         eff_order_F1 = min(eff_order_r, eff_order_p)
+
 
     # now compute every subcategory:
     for key in total_numerator.keys():
@@ -130,7 +133,6 @@ def scoring(doc_s_count: Sequence[Counts], max_doc_r_count: Sequence[Counts], we
             precision = arm_average(precision_values)
         F1 = compute_F1(recall, precision)
         return recall, precision, F1
-
     R, P, F1 = get_sum_results(list(recalls.values()), list(precisions.values()))
 
     # For dBlonDe

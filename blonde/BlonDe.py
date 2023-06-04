@@ -6,7 +6,7 @@ Adapted from Sacreblonde.
 import math
 import logging
 from importlib import import_module
-from . import WEIGHTS, CATEGORIES
+from . import WEIGHTS_EN, WEIGHTS_DE, CATEGORIES_EN, CATEGORIES_DE
 from .processing import process_corpus, add_blonde_plus_categories, refine_NER
 from .dBlonDe import scoring
 from typing import Sequence, Tuple, Dict, Any, Union, Optional, Sequence
@@ -69,7 +69,10 @@ class BLONDEScore(Score):
             for method, values in verbose.items():
                 self.verbose += f"{method}\n\t"
                 for category, score in values.items():
-                    self.verbose += f"{category}: {score:.2%}\t"
+                    if method in ['num_pronouns', 'num_formality', 'num_entity']:
+                        self.verbose += f"{category}: {score}\t"
+                    else:
+                        self.verbose += f"{category}: {score:.2%}\t"
                 self.verbose += "\n"
 
 
@@ -98,8 +101,6 @@ class BLONDE(Metric):
     """
 
 
-    WEIGHTS_DEFAULTS = WEIGHTS
-
     SMOOTH_DEFAULTS: Dict[str, Optional[float]] = {
         # The defaults for `floor` and `add-k` are obtained from the following paper
         # A Systematic Comparison of Smoothing Techniques for Sentence-Level BLEU
@@ -115,10 +116,10 @@ class BLONDE(Metric):
 
 
 
-    def __init__(self, weights: Weight=WEIGHTS_DEFAULTS,
+    def __init__(self, weights=None,
                  weight_normalize: bool = False,
                  average_method: str = 'geometric',
-                 categories: dict = CATEGORIES,
+                 categories=None,
                  plus_categories=None,  # ("ambiguity", "ellipsis")
                  plus_weights=(1, 1),
                  lowercase: bool = False,
@@ -127,14 +128,37 @@ class BLONDE(Metric):
                  effective_order: bool = False,
                  references: Optional[Sequence[Sequence[Sequence[str]]]] = None,
                  annotation: Sequence[Sequence[str]] = None,
-                 ner_refined: Sequence[Sequence[str]] = None):
+                 ner_refined: Sequence[Sequence[str]] = None,
+                 language: str = 'english',
+                 source=None,
+                 source_lang=None,):
         """`BLONDE` initializer."""
         super().__init__()
+        self.language = language
+        self.source = source
+        self.source_lang = source_lang
+
+        if weights is None:
+            if self.language == 'english':
+                weights = WEIGHTS_EN
+            elif self.language == 'german':
+                weights = WEIGHTS_DE
+            else:
+                assert False
+
+        self.categories = categories
+        if self.categories is None:
+            if self.language == 'english':
+                self.categories = CATEGORIES_EN
+            elif self.language == 'german':
+                self.categories = CATEGORIES_DE
+            else:
+                assert False
+
         self.set_weight(weights, weight_normalize)
         self.set_smooth(smooth_method, smooth_value)
         self.lowercase = lowercase
         self.average_method = average_method
-        self.categories = categories
         self.plus_categories = plus_categories
         if plus_categories is not None:
             self.add_categories(plus_categories, plus_weights)
@@ -212,7 +236,43 @@ class BLONDE(Metric):
                                                                   average_method=self.average_method,
                                                                   smooth_method=self.smooth_method,
                                                                   smooth_value=self.smooth_value)
-        verbose = {'recalls': recalls, 'precisions': precisions, 'F1s': F1s}
+        num_pronouns_male_ref = sum([c['pronoun']['masculine'] for c in max_r_count])
+        num_pronouns_male_hyp = sum([c['pronoun']['masculine'] for c in s_count])
+        num_pronouns_female_ref = sum([c['pronoun']['feminine'] for c in max_r_count])
+        num_pronouns_female_hyp = sum([c['pronoun']['feminine'] for c in s_count])
+        num_pronouns_neuter_ref = sum([c['pronoun']['neuter'] for c in max_r_count])
+        num_pronouns_neuter_hyp = sum([c['pronoun']['neuter'] for c in s_count])
+        num_formal_ref = sum([c['formality']['formal'] for c in max_r_count])
+        num_formal_hyp = sum([c['formality']['formal'] for c in s_count])
+        num_informal_ref = sum([c['formality']['informal'] for c in max_r_count])
+        num_informal_hyp = sum([c['formality']['informal'] for c in s_count])
+        num_person_ref = sum([sum(c['entity'][0].values()) for c in max_r_count])
+        num_person_hyp = sum([sum(c['entity'][0].values()) for c in s_count])
+        num_nonperson_ref = sum([sum(c['entity'][1].values()) for c in max_r_count])
+        num_nonperson_hyp = sum([sum(c['entity'][1].values()) for c in s_count])
+
+        verbose = {'recalls': recalls, 'precisions': precisions, 'F1s': F1s,
+                   'num_pronouns': {
+                       'num_pronouns_male_ref': num_pronouns_male_ref,
+                       'num_pronouns_male_hyp': num_pronouns_male_hyp,
+                       'num_pronouns_female_ref': num_pronouns_female_ref,
+                       'num_pronouns_female_hyp': num_pronouns_female_hyp,
+                       'num_pronouns_neuter_ref': num_pronouns_neuter_ref,
+                       'num_pronouns_neuter_hyp': num_pronouns_neuter_hyp,
+                        },
+                   'num_formality': {
+                       'formal_ref': num_formal_ref,
+                       'formal_hyp': num_formal_hyp,
+                       'informal_ref': num_informal_ref,
+                       'informal_hyp': num_informal_hyp,
+                   },
+                   'num_entity': {
+                       'person_ref': num_person_ref,
+                       'person_hyp': num_person_hyp,
+                       'nonperson_ref': num_nonperson_ref,
+                       'nonperson_hyp': num_nonperson_hyp,
+                   }
+                   }
         return BLONDEScore(recall, precision, F1, verbose)
 
     def _compute_score_from_stats(self, stats: Tuple[Sequence[Counts], Sequence[Counts]]) -> BLONDEScore:
@@ -298,7 +358,9 @@ class BLONDE(Metric):
         # process all the reference corpora one by one
         all_processed_reference = []
         for reference in references:
-            processed_reference = process_corpus(reference, self.categories, lowercase=self.lowercase)
+            processed_reference = process_corpus(reference, self.categories, lowercase=self.lowercase,
+                                                 language=self.language, source=self.source,
+                                                 source_lang=self.source_lang)
             if annotation is not None:
                 assert len(annotation) == len(processed_reference)
                 for i, (ref_doc, lines_an) in enumerate(zip(processed_reference, annotation)):
@@ -340,7 +402,8 @@ class BLONDE(Metric):
             raise RuntimeError('No references provided and the cache is empty.')
 
         # process the hypothesis corpus
-        processed_hypotheses = process_corpus(hypotheses, self.categories, lowercase=self.lowercase)
+        processed_hypotheses = process_corpus(hypotheses, self.categories, lowercase=self.lowercase,
+                                              language=self.language, source=self.source, source_lang=self.source_lang)
 
         # add annotation
         if annotation is not None:
