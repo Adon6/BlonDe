@@ -97,11 +97,11 @@ def main():
     else:
         assert False
 
+    refs = []
     if os.path.isfile(args.system):
         with open(args.system, encoding="utf-8") as f:
             sys = [line.strip() for line in f]
 
-        refs = []
         for ref_file in args.reference:
             assert os.path.exists(ref_file), f"reference file {ref_file} doesn't exist"
             with open(ref_file, encoding="utf-8") as f:
@@ -124,7 +124,8 @@ def main():
 
     categories = {}
     for category in args.categories:
-        categories[category] = CATEGORIES[category]
+        if category in CATEGORIES:
+            categories[category] = CATEGORIES[category]
 
     if args.language == 'english':
         weights = WEIGHTS_EN

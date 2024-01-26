@@ -122,7 +122,7 @@ class BLONDE(Metric):
                  categories=None,
                  plus_categories=None,  # ("ambiguity", "ellipsis")
                  plus_weights=(1, 1),
-                 lowercase: bool = False,
+                 lowercase: bool = True,
                  smooth_method: str = 'exp',
                  smooth_value: Optional[float] = None,
                  effective_order: bool = False,

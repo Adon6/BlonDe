@@ -1,5 +1,5 @@
 import logging, spacy, re
-from . import CATEGORIES_EN, CATEGORIES_DE, VB_TYPE, PRONOUN_TYPE_ENGLISH, PRONOUN_TYPE_GERMAN,\
+from . import CATEGORIES_EN, CATEGORIES_DE, VB_TYPE, VB_TYPE_GERMAN, PRONOUN_TYPE_ENGLISH, PRONOUN_TYPE_GERMAN,\
     PRONOUN_MAP_ENGLISH, PRONOUN_MAP_GERMAN, DM_TYPE, DM_MAP, PRONOUN_TAGS_ENGLISH, PRONOUN_TAGS_GERMAN,\
     PRONOUN_MAP_ENGLISH_2ND_PERSON, PRONOUN_MAP_GERMAN_2ND_PERSON, PRONOUN_MAP_ENGLISH_3rd_PERSON_PLURAL
 from .utils import ProcessedSent, ProcessedDoc, ProcessedCorpus
@@ -12,10 +12,11 @@ nlp_en = en_core_web_sm.load()
 nlp_de = de_core_news_sm.load()
 # nlp = spacy.load('en_core_web_sm')
 
-def count_vb(sent_tag):
+def count_vb(sent_tag, categories):
     count_vb = Counter()
+    #print(f"counting vb {sent_tag}")
     for tag in sent_tag:
-        if tag in VB_TYPE:
+        if tag in categories:
             count_vb[tag] += 1
     return count_vb
 
@@ -200,7 +201,7 @@ def process_corpus(corpus: Sequence[Sequence[str]], categories: Dict[str, Sequen
         processed_sent = {"str": doc.text,  "sent_tok": sent_tok, "sent_tag": sent_tag, "sent_ent": sent_ent,
                           "count": {}}
         if "tense" in categories.keys():
-            processed_sent["count"]["tense"] = count_vb(sent_tag)
+            processed_sent["count"]["tense"] = count_vb(sent_tag,categories["tense"])
         if "pronoun" in categories.keys():
             processed_sent["count"]["pronoun"] = count_pronoun(sent_tok, pronoun_type=pronoun_type,
                                                                pronoun_map=pronoun_map, sent_tag=sent_tag,

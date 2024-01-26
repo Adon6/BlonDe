@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-__version__ = '0.1.4'
+__version__ = '0.1.5'
 
 
+# from here: https://www.sfs.uni-tuebingen.de/Elwis/stts/Wortlisten/WortFormen.html
 VB_TYPE = ('VBD', 'VBN', 'VBP', 'VBZ', 'VBG', 'VB', 'MD')
+VB_TYPE_GERMAN = ('VMFIN','VVFIN','VAFIN','VVINF','VVPP','VAPP')
 # VB_MAP = dict(zip(VB_TYPE, VB_TYPE))
 
 PRONOUN_TYPE_ENGLISH = ['masculine', 'feminine', 'neuter', 'epicene']
@@ -77,7 +79,7 @@ CATEGORIES_EN = {
 }
 
 CATEGORIES_DE = {
-    "tense": VB_TYPE,
+    "tense": VB_TYPE_GERMAN,
     "pronoun": PRONOUN_TYPE_GERMAN,
     "entity": ["PERSON", "NON-PERSON"],
     "dm": DM_TYPE,

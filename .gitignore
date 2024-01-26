@@ -9,4 +9,6 @@
 /evaluation/output_bwb/
 /util/__pycache__/
 /BWB/__pycache__/
+/blonde/__pycache__/
+/blonde_cli/__pycache__/
 /.DS_Store

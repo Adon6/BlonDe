@@ -10,6 +10,19 @@ BWB is a large-scale bilingual parallel corpus that consists of web novels.
 
 We hope that they will serve as a guide and inspiration for more work in the area of document level machine translation.
 
+## Feature Extension: More Support for German Evaluation
+
+Originally, the BLonDE framework from [EleanorJiang](https://github.com/EleanorJiang/BlonDe) only supports the evaluation of the English language. Thanks to [christian3141](https://github.com/christian3141/BlonDe) for extending it to the German language. This update aims to further improve support for evaluating German.
+
+### Details
+
+- Added Verb Types for German evaluation, utilizing word types from [the Stuttgart-Tübingen Tagset (STTS)](https://www.sfs.uni-tuebingen.de/Elwis/stts/Wortlisten/WortFormen.html)
+- Temporarily rectified discrepancies in default parameters between the Command Line and Python code, ensuring consistent scores when using both the command line interface and Python code under default conditions.
+- Fixed other small bugs.
+
+Further:
+- Need to reconstruct it into a more flexible framework for other languages.
+
 
 ## Quick Links
 - 📐 [BlonDe](#-the-blonde-package)
